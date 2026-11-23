@@ -2818,7 +2818,7 @@ Library.Watermark = function(Self, Params)
                     ImageColor3 = Color3.fromRGB(255, 255, 255),
                     ScaleType = Enum.ScaleType.Fit,
                     AnchorPoint = Vector2.new(0, 0.5),
-                    Image = Watermark.Logo or "rbxthumb://type=Asset&id=71016166985185&w=420&h=420",
+                    Image = Watermark.Logo or "rbxthumb://type=Asset&id=132857511218951&w=420&h=420",
                     BackgroundTransparency = 1,
                     Position = UDim2.new(0, 0, 0.5, 0),
                     Size = UDim2.new(0, 30, 0, 30),
@@ -3689,7 +3689,7 @@ Library.Watermark = function(Self, Params)
             local Window = {
                 Name = Params.Name or Params.name or "Window",
                 SubName = Params.SubName or Params.subname or "",
-                Logo = Params.Logo or Params.logo or "rbxthumb://type=Asset&id=71016166985185&w=420&h=420",
+                Logo = Params.Logo or Params.logo or "rbxthumb://type=Asset&id=132857511218951&w=420&h=420",
 
                 IsOpen = true,
                 Pages = { },
