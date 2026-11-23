@@ -37,7 +37,7 @@ local Mouse = cloneref(LocalPlayer:GetMouse())
 local Library = { 
     Flags = { },
 
-    MenuKeybind = tostring(Enum.KeyCode.X),
+    MenuKeybind = tostring(Enum.KeyCode.RightShift),
 
     Directory = "vaping it",
     Folders = {
@@ -3310,7 +3310,9 @@ Library.Watermark = function(Self, Params)
             table.insert(Library.Notifications, 1, Notification)
 
             for Index, Notif in Library.Notifications do
-                Notif.Items["Notification"].Instance.LayoutOrder = Index
+                if type(Notif) == "table" and Notif.Items and Notif.Items["Notification"] then
+                    Notif.Items["Notification"].Instance.LayoutOrder = Index
+                end
             end
 
             task.wait()
@@ -6648,7 +6650,7 @@ end
                 MenuSection:Label({Name = "Menu Keybind"}):Keybind({
                     Name = "Menu Keybind",
                     Flag = "MenuKeybind",
-                    Default = Enum.KeyCode.X,
+                    Default = Enum.KeyCode.RightShift,
                     Mode = "Toggle",
                     Callback = function()
                         if Library.Flags["MenuKeybind"] and Library.Flags["MenuKeybind"].Key then
