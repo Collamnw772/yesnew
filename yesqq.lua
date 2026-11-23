@@ -647,52 +647,60 @@ local Library = {
     end
 
     Library.MakeDraggable = function(Self, Handle)
-        if not Self.Instance then 
+        if not Self.Instance then
             return
         end
-    
+
         local Gui = Self.Instance
         local HandleInstance = (Handle and Handle.Instance) or Gui
-        local Dragging = false 
+        local Dragging = false
         local DragStart
-        local StartPosition 
-    
+        local StartPosition
+
         local Set = function(Input)
-            local DragDelta = Input.Position - DragStart
+            if Gui:GetAttribute("EXT_Resizing") then
+                Dragging = false
+                return
+            end
+            local Scale = Library:GetScreenScale()
+            local DragDelta = (Input.Position - DragStart) / Scale
             local NewX = StartPosition.X.Offset + DragDelta.X
             local NewY = StartPosition.Y.Offset + DragDelta.Y
 
-            local ScreenSize = Gui.Parent.AbsoluteSize
-            local GuiSize = Gui.AbsoluteSize
-    
-            NewX = math.clamp(NewX, 0, ScreenSize.X - GuiSize.X)
-            NewY = math.clamp(NewY, 0, ScreenSize.Y - GuiSize.Y)
-    
-            Self:Tween({Position = UDim2.new(0, NewX, 0, NewY)}, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out))
+            local ScreenSize = Gui.Parent.AbsoluteSize / Scale
+            local GuiSize = Gui.AbsoluteSize / Scale
+
+            NewX = math.clamp(NewX, 0, math.max(0, ScreenSize.X - GuiSize.X))
+            NewY = math.clamp(NewY, 0, math.max(0, ScreenSize.Y - GuiSize.Y))
+
+            Gui.Position = UDim2.new(0, math.round(NewX), 0, math.round(NewY))
         end
-    
+
         local InputChanged
-    
+
         Library:Connect(HandleInstance.InputBegan, function(Input)
+            if Gui:GetAttribute("EXT_Resizing") then return end
             if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
                 Dragging = true
                 DragStart = Input.Position
                 StartPosition = Gui.Position
-    
-                if InputChanged then 
+
+                if InputChanged then
                     return
                 end
-    
+
                 InputChanged = Input.Changed:Connect(function()
-                    if Input.UserInputState == Enum.UserInputState.End then
+                    if Input.UserInputState == Enum.UserInputState.End or Input.UserInputState == Enum.UserInputState.Cancel then
                         Dragging = false
-                        InputChanged:Disconnect()
-                        InputChanged = nil
+                        if InputChanged then
+                            InputChanged:Disconnect()
+                            InputChanged = nil
+                        end
                     end
                 end)
             end
         end)
-    
+
         Library:Connect(UserInputService.InputChanged, function(Input)
             if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
                 if Dragging then
@@ -700,7 +708,7 @@ local Library = {
                 end
             end
         end)
-    
+
         return Dragging
     end
 
@@ -714,149 +722,215 @@ local Library = {
 
         Gui.AnchorPoint = Vector2.new(0, 0)
         task.wait()
-        Gui.Position = UDim2.new(0, AbsPos.X, 0, AbsPos.Y + GuiInset)
+        local Scale = Library:GetScreenScale()
+        Gui.Position = UDim2.new(0, math.round(AbsPos.X / Scale), 0, math.round((AbsPos.Y + GuiInset) / Scale))
     end
 
     Library.MakeResizeable = function(Self, Minimum)
-        if not Self.Instance then 
+        if not Self.Instance then
             return
         end
 
         local Gui = Self.Instance
+        Gui:SetAttribute("EXT_ResizerV2", true)
+        Minimum = Minimum or Vector2.new(480, 360)
 
-        local Resizing = false 
+        local Resizing = false
         local CurrentSide = nil
+        local ActiveInput = nil
 
-        local StartMouse = nil 
-        local StartPosition = nil 
+        local StartMouse = nil
+        local StartPosition = nil
         local StartSize = nil
-        
-        local EdgeThickness = 2
+        local TargetPos = nil
+        local TargetSize = nil
 
-        local MakeEdge = function(Name, Position, Size)
-            local Button = Library:Create("TextButton", {
-                Name = "\0",
+        local EdgeHit = 8
+        local CornerHit = 18
+
+        local MakeHandle = function(Name, Position, Size, Side, GlowPos, GlowSize, Z)
+            local Hit = Library:Create("TextButton", {
+                Name = "Resize_" .. Name,
                 Size = Size,
                 Position = Position,
-                BackgroundColor3 = Color3.fromRGB(166, 147, 243),
                 BackgroundTransparency = 1,
                 Text = "",
                 BorderSizePixel = 0,
                 AutoButtonColor = false,
                 Parent = Gui,
-                ZIndex = 99999,
-            })  Button:AddToTheme({BackgroundColor3 = "Accent"})
+                ZIndex = Z or 99998,
+            })
 
-            return Button
+            local Glow = nil
+            if GlowPos and GlowSize then
+                Glow = Library:Create("Frame", {
+                    Name = "Glow",
+                    Position = GlowPos,
+                    Size = GlowSize,
+                    BackgroundColor3 = Library.Theme["Accent"],
+                    BackgroundTransparency = 1,
+                    BorderSizePixel = 0,
+                    Parent = Hit.Instance,
+                    ZIndex = (Z or 99998) + 1,
+                }):AddToTheme({BackgroundColor3 = "Accent"})
+                Library:Create("UICorner", { CornerRadius = UDim.new(0, 3), Parent = Glow.Instance })
+            end
+
+            return { Button = Hit, Glow = Glow, Side = Side }
         end
 
-        local Edges = {
-            {Button = MakeEdge(
-                "Left", 
-                UDim2.new(0, 0, 0, 0), 
-                UDim2.new(0, EdgeThickness, 1, 0)), 
-                Side = "L"
-            },
-
-            {Button = MakeEdge(
-                "Right", 
-                UDim2.new(1, -EdgeThickness, 0, 0), 
-                UDim2.new(0, EdgeThickness, 1, 0)), 
-                Side = "R"
-            },
-
-            {Button = MakeEdge(
-                "Top", UDim2.new(0, 0, 0, 0), 
-                UDim2.new(1, 0, 0, EdgeThickness)), 
-                Side = "T"
-            },
-
-            {Button = MakeEdge(
-                "Bottom", 
-                UDim2.new(0, 0, 1, -EdgeThickness), 
-                UDim2.new(1, 0, 0, EdgeThickness)), 
-                Side = "B"
-            },
+        local Handles = {
+            MakeHandle("L",  UDim2.new(0, -4, 0, CornerHit),           UDim2.new(0, EdgeHit, 1, -CornerHit * 2), "L",  UDim2.new(0, 4, 0, 8),   UDim2.new(0, 2, 1, -16), 99997),
+            MakeHandle("R",  UDim2.new(1, -EdgeHit + 4, 0, CornerHit), UDim2.new(0, EdgeHit, 1, -CornerHit * 2), "R",  UDim2.new(1, -6, 0, 8),  UDim2.new(0, 2, 1, -16), 99997),
+            MakeHandle("T",  UDim2.new(0, CornerHit, 0, -4),           UDim2.new(1, -CornerHit * 2, 0, EdgeHit), "T",  UDim2.new(0, 8, 0, 4),   UDim2.new(1, -16, 0, 2), 99997),
+            MakeHandle("B",  UDim2.new(0, CornerHit, 1, -EdgeHit + 4), UDim2.new(1, -CornerHit * 2, 0, EdgeHit), "B",  UDim2.new(0, 8, 1, -6),  UDim2.new(1, -16, 0, 2), 99997),
+            MakeHandle("TL", UDim2.new(0, -4, 0, -4),                  UDim2.new(0, CornerHit, 0, CornerHit),    "TL", nil, nil, 99999),
+            MakeHandle("TR", UDim2.new(1, -CornerHit + 4, 0, -4),      UDim2.new(0, CornerHit, 0, CornerHit),    "TR", nil, nil, 99999),
+            MakeHandle("BL", UDim2.new(0, -4, 1, -CornerHit + 4),      UDim2.new(0, CornerHit, 0, CornerHit),    "BL", nil, nil, 99999),
+            MakeHandle("BR", UDim2.new(1, -CornerHit + 2, 1, -CornerHit + 2), UDim2.new(0, CornerHit + 2, 0, CornerHit + 2), "BR", nil, nil, 99999),
         }
 
-        local BeginResizing = function(Side)
-            Resizing = true 
-            CurrentSide = Side 
+        local BRHandle = Handles[8].Button.Instance
+        local GripBars = {}
+        for idx, len in ipairs({ 12, 8, 4 }) do
+            local offset = (idx - 1) * 4 + 3
+            local bar = Library:Create("Frame", {
+                Name = "GripBar" .. idx,
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.new(1, -offset - 2, 1, -offset - 2),
+                Size = UDim2.new(0, len, 0, 2),
+                Rotation = -45,
+                BackgroundColor3 = Library.Theme["Inactive Text"],
+                BackgroundTransparency = 0.25,
+                BorderSizePixel = 0,
+                Parent = BRHandle,
+                ZIndex = 100000,
+            })
+            Library:Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = bar.Instance })
+            table.insert(GripBars, bar)
+        end
+
+        local function PaintGrip(active)
+            local col = active and Library.Theme["Accent"] or Library.Theme["Inactive Text"]
+            local tr = active and 0 or 0.25
+            for _, bar in ipairs(GripBars) do
+                bar:Tween({ BackgroundColor3 = col, BackgroundTransparency = tr }, TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out))
+            end
+        end
+
+        local BeginResizing = function(Side, Input)
+            Resizing = true
+            CurrentSide = Side
+            ActiveInput = Input
+            Gui:SetAttribute("EXT_Resizing", true)
 
             StartMouse = UserInputService:GetMouseLocation()
-
             StartPosition = Vector2.new(Gui.Position.X.Offset, Gui.Position.Y.Offset)
             StartSize = Vector2.new(Gui.Size.X.Offset, Gui.Size.Y.Offset)
-            
-            for Index, Value in Edges do 
-                Value.Button.Instance.BackgroundTransparency = (Value.Side == Side) and 0 or 1
+            TargetPos = StartPosition
+            TargetSize = StartSize
+
+            for _, h in ipairs(Handles) do
+                if h.Glow then
+                    h.Glow:Tween({ BackgroundTransparency = (h.Side == Side) and 0 or 1 }, TweenInfo.new(0.12))
+                end
             end
+            if Side == "BR" then PaintGrip(true) end
         end
 
         local EndResizing = function()
-            Resizing = false 
+            Resizing = false
             CurrentSide = nil
+            ActiveInput = nil
+            Gui:SetAttribute("EXT_Resizing", false)
 
-            for Index, Value in Edges do 
-                Value.Button.Instance.BackgroundTransparency = 1
+            for _, h in ipairs(Handles) do
+                if h.Glow then
+                    h.Glow:Tween({ BackgroundTransparency = 1 }, TweenInfo.new(0.15))
+                end
             end
+            PaintGrip(false)
         end
 
-        for Index, Value in Edges do 
-            Value.Button:Connect("InputBegan", function(Input)
+        for _, h in ipairs(Handles) do
+            h.Button:Connect("MouseEnter", function()
+                if Resizing then return end
+                if h.Glow then h.Glow:Tween({ BackgroundTransparency = 0.2 }, TweenInfo.new(0.14)) end
+                if h.Side == "BR" then PaintGrip(true) end
+            end)
+            h.Button:Connect("MouseLeave", function()
+                if Resizing then return end
+                if h.Glow then h.Glow:Tween({ BackgroundTransparency = 1 }, TweenInfo.new(0.14)) end
+                if h.Side == "BR" then PaintGrip(false) end
+            end)
+            h.Button:Connect("InputBegan", function(Input)
                 if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-                    BeginResizing(Value.Side)
+                    BeginResizing(h.Side, Input)
                 end
             end)
         end
 
         Library:Connect(UserInputService.InputEnded, function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-                if Resizing then
-                    EndResizing()
-                end
+            if Resizing and (Input == ActiveInput or Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
+                EndResizing()
             end
         end)
 
-        Library:Connect(RunService.RenderStepped, function()
-            if not Resizing or not CurrentSide then 
-                return 
+        Library:Connect(RunService.RenderStepped, function(dt)
+            if not Resizing or not CurrentSide then
+                return
             end
 
+            local Scale = Library:GetScreenScale()
             local MouseLocation = UserInputService:GetMouseLocation()
-            local dx = MouseLocation.X - StartMouse.X
-            local dy = MouseLocation.Y - StartMouse.Y
-        
+            local dx = (MouseLocation.X - StartMouse.X) / Scale
+            local dy = (MouseLocation.Y - StartMouse.Y) / Scale
+
             local x, y = StartPosition.X, StartPosition.Y
             local w, h = StartSize.X, StartSize.Y
 
-            if CurrentSide == "L" then
-                x = StartPosition.X + dx
-                w = StartSize.X - dx
-            elseif CurrentSide == "R" then
-                w = StartSize.X + dx
-            elseif CurrentSide == "T" then
-                y = StartPosition.Y + dy
-                h = StartSize.Y - dy
-            elseif CurrentSide == "B" then
-                h = StartSize.Y + dy
-            end
-        
+            local hasL = CurrentSide:find("L", 1, true) ~= nil
+            local hasR = CurrentSide:find("R", 1, true) ~= nil
+            local hasT = CurrentSide:find("T", 1, true) ~= nil
+            local hasB = CurrentSide:find("B", 1, true) ~= nil
+
+            if hasL then x = StartPosition.X + dx; w = StartSize.X - dx end
+            if hasR then w = StartSize.X + dx end
+            if hasT then y = StartPosition.Y + dy; h = StartSize.Y - dy end
+            if hasB then h = StartSize.Y + dy end
+
+            local Screen = (Gui.Parent and Gui.Parent.AbsoluteSize or Vector2.new(1920, 1080)) / Scale
+            local MaxW = math.max(Minimum.X, Screen.X - 20)
+            local MaxH = math.max(Minimum.Y, Screen.Y - 20)
+
             if w < Minimum.X then
-                if CurrentSide == "L" then
-                    x = x - (Minimum.X - w)
-                end
+                if hasL then x = x - (Minimum.X - w) end
                 w = Minimum.X
+            elseif w > MaxW then
+                if hasL then x = x + (w - MaxW) end
+                w = MaxW
             end
+
             if h < Minimum.Y then
-                if CurrentSide == "T" then
-                    y = y - (Minimum.Y - h)
-                end
+                if hasT then y = y - (Minimum.Y - h) end
                 h = Minimum.Y
+            elseif h > MaxH then
+                if hasT then y = y + (h - MaxH) end
+                h = MaxH
             end
-        
-            Self:Tween({Position = UDim2.fromOffset(x, y)}, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out))
-            Self:Tween({Size = UDim2.fromOffset(w, h)}, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out))
+
+            x = math.clamp(x, 0, math.max(0, Screen.X - w))
+            y = math.clamp(y, 0, math.max(0, Screen.Y - h))
+
+            TargetPos = Vector2.new(x, y)
+            TargetSize = Vector2.new(w, h)
+
+            local alpha = math.clamp((dt or 0.016) * 32, 0, 1)
+            local curPos = Vector2.new(Gui.Position.X.Offset, Gui.Position.Y.Offset):Lerp(TargetPos, alpha)
+            local curSize = Vector2.new(Gui.Size.X.Offset, Gui.Size.Y.Offset):Lerp(TargetSize, alpha)
+
+            Gui.Position = UDim2.fromOffset(math.round(curPos.X), math.round(curPos.Y))
+            Gui.Size = UDim2.fromOffset(math.round(curSize.X), math.round(curSize.Y))
         end)
     end
 
@@ -3628,18 +3702,18 @@ Library.Watermark = function(Self, Params)
                     })
                 end
 
+                local WinSize = Params.Size or Params.size or UDim2.new(0, 720, 0, 560)
                 Items["MainFrame"] = Library:Create("Frame", {
                     Name = "\0",
                     Parent = Library.Holder.Instance,
                     AnchorPoint = Vector2.new(0.5, 0.5),
                     Position = UDim2.new(0.5, 0, 0.5, 0),
-                    Size = UDim2.new(0, 560, 0, 560),
+                    Size = WinSize,
                     BorderSizePixel = 0,
                     BackgroundColor3 = Library.Theme["Background"]
                 }):AddToTheme({BackgroundColor3 = 'Background'})
                 
-                Items["MainFrame"]:MakeDraggable()
-                Items["MainFrame"]:MakeResizeable(Vector2.new(Items["MainFrame"].Instance.AbsoluteSize.X, Items["MainFrame"].Instance.AbsoluteSize.Y))
+                Items["MainFrame"]:MakeResizeable(Vector2.new(480, 360))
                 
                 Library:Create("UICorner", {
                     Name = "\0",
@@ -3660,6 +3734,8 @@ Library.Watermark = function(Self, Params)
                     BorderSizePixel = 0,
                     BackgroundColor3 = Library.Theme["Inline"]
                 }):AddToTheme({BackgroundColor3 = 'Inline'})
+
+                Items["MainFrame"]:MakeDraggable(Items["Top"])
                 
                 Library:Create("UICorner", {
                     Name = "\0",
@@ -3694,55 +3770,83 @@ Library.Watermark = function(Self, Params)
                     Parent = Items["Top"].Instance,
                     TextColor3 = Library.Theme["Text"],
                     Text = Window.Name,
-                    Position = UDim2.new(0, 52, 0, 10),
+                    Position = UDim2.new(0, 54, 0, 9),
+                    Size = UDim2.new(0, 134, 0, 20),
                     BackgroundTransparency = 1,
                     TextXAlignment = Enum.TextXAlignment.Left,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
                     BorderSizePixel = 0,
-                    AutomaticSize = Enum.AutomaticSize.XY,
                     BackgroundColor3 = Library.Theme["Text"]
                 }):AddToTheme({TextColor3 = 'Text'})
                 
                 Items["SubTitle"] = Library:Create("TextLabel", {
                     Name = "\0",
                     FontFace = Library.Font,
-                    TextSize = Library.FontSize,
+                    TextSize = Library.FontSize - 1,
                     Parent = Items["Top"].Instance,
                     TextColor3 = Library.Theme["Inactive Text"],
                     Text = Window.SubName,
-                    Position = UDim2.new(0, 52, 0, 30),
+                    Position = UDim2.new(0, 54, 0, 30),
+                    Size = UDim2.new(0, 134, 0, 16),
                     BackgroundTransparency = 1,
                     TextXAlignment = Enum.TextXAlignment.Left,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
                     BorderSizePixel = 0,
-                    AutomaticSize = Enum.AutomaticSize.XY,
                     BackgroundColor3 = Library.Theme["Text"]
                 }):AddToTheme({TextColor3 = 'Inactive Text'})
                 
-                Items["Pages"] = Library:Create("Frame", {
+                Items["Pages"] = Library:Create("ScrollingFrame", {
                     Name = "\0",
                     Parent = Items["Top"].Instance,
-                    AnchorPoint = Vector2.new(1, 0),
                     BackgroundTransparency = 1,
-                    Position = UDim2.new(1, 0, 0, 0),
-                    Size = UDim2.new(0, 0, 1, 0),
+                    Position = UDim2.new(0, 194, 0, 0),
+                    Size = UDim2.new(1, -204, 1, 0),
                     BorderSizePixel = 0,
-                    AutomaticSize = Enum.AutomaticSize.X,
+                    ClipsDescendants = true,
+                    CanvasSize = UDim2.new(0, 0, 0, 0),
+                    AutomaticCanvasSize = Enum.AutomaticSize.X,
+                    ScrollingDirection = Enum.ScrollingDirection.X,
+                    ScrollBarThickness = 0,
+                    ElasticBehavior = Enum.ElasticBehavior.Never,
                     BackgroundColor3 = Library.Theme["Text"]
                 })
                 
                 Library:Create("UIPadding", {
                     Name = "\0",
                     Parent = Items["Pages"].Instance,
-                    PaddingRight = UDim.new(0, 10)
+                    PaddingLeft = UDim.new(0, 4),
+                    PaddingRight = UDim.new(0, 4)
                 })
 
-                Library:Create("UIListLayout", {
+                local PagesLayout = Library:Create("UIListLayout", {
                     Name = "\0",
                     Parent = Items["Pages"].Instance,
                     VerticalAlignment = Enum.VerticalAlignment.Center,
+                    HorizontalAlignment = Enum.HorizontalAlignment.Right,
                     FillDirection = Enum.FillDirection.Horizontal,
-                    Padding = UDim.new(0, 10),
+                    Padding = UDim.new(0, 6),
                     SortOrder = Enum.SortOrder.LayoutOrder
-                })        
+                })
+
+                local function SyncPagesAlign()
+                    local pf = Items["Pages"].Instance
+                    local ll = PagesLayout.Instance
+                    if not pf or not ll then return end
+                    local overflows = ll.AbsoluteContentSize.X + 8 > pf.AbsoluteSize.X
+                    ll.HorizontalAlignment = overflows and Enum.HorizontalAlignment.Left or Enum.HorizontalAlignment.Right
+                    if not overflows then pf.CanvasPosition = Vector2.zero end
+                end
+                Library:Connect(PagesLayout.Instance:GetPropertyChangedSignal("AbsoluteContentSize"), SyncPagesAlign)
+                Library:Connect(Items["Pages"].Instance:GetPropertyChangedSignal("AbsoluteSize"), SyncPagesAlign)
+                Library:Connect(Items["Pages"].Instance.InputChanged, function(Input)
+                    if Input.UserInputType == Enum.UserInputType.MouseWheel then
+                        local pf = Items["Pages"].Instance
+                        local maxX = math.max(0, PagesLayout.Instance.AbsoluteContentSize.X + 8 - pf.AbsoluteSize.X)
+                        if maxX > 0 then
+                            pf.CanvasPosition = Vector2.new(math.clamp(pf.CanvasPosition.X - Input.Position.Z * 42, 0, maxX), 0)
+                        end
+                    end
+                end)        
                 
                 Items["Content"] = Library:Create("Frame", {
                     Name = "\0",
