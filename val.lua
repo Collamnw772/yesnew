@@ -289,7 +289,7 @@ local Library do
                 [Property] = Visibility and OldTransparency or 1
             }, true)
 
-            Library:Connect(NewTween.Tween.Completed, function()
+            NewTween.Tween.Completed:Once(function()
                 if not Visibility then 
                     task.wait()
                     Item[Property] = OldTransparency
@@ -873,7 +873,7 @@ local Library do
         end
 
         -- already a full asset url (rbxassetid://..., rbxasset://..., rbxthumb://..., http..., custom asset path)
-        if Icon:find("rbxassetid://") or Icon:find("rbxasset://") or Icon:find("rbxthumb://") or Icon:find("http") or Icon:find("rbxasset") then
+        if Icon:find("://") or Icon:find("http") or Icon:find("rbxasset") then
             return Icon
         end
 
@@ -5736,48 +5736,14 @@ local Library do
                 UserInputService.MouseIconEnabled = true
             end
 
-            local Debounce = false 
-
             function Window:SetOpen(Bool)
-                if Debounce then 
-                    return 
+                if Window.IsOpen == Bool and Items["MainFrame"].Instance.Visible == Bool then
+                    return
                 end
 
                 Window.IsOpen = Bool
-
-                Debounce = true
-
-                if Bool then 
-                    Items["MainFrame"].Instance.Visible = true
-                end
-
-                local Descendants = Items["MainFrame"].Instance:GetDescendants()
-                TableInsert(Descendants, Items["MainFrame"].Instance)
-
-                local NewTween
-
-                for Index, Value in Descendants do 
-                    local TransparencyProperty = Tween:GetProperty(Value)
-
-                    if not TransparencyProperty then 
-                        continue
-                    end
-
-                    if type(TransparencyProperty) == "table" then 
-                        for _, Property in TransparencyProperty do 
-                            NewTween = Tween:FadeItem(Value, Property, Bool, Window.FadeSpeed)
-                        end
-                    else
-                        NewTween = Tween:FadeItem(Value, TransparencyProperty, Bool, Window.FadeSpeed)
-                    end
-                end
-
-                Library:Connect(NewTween.Tween.Completed, function()
-                    Debounce = false
-                    Items["MainFrame"].Instance.Visible = Bool
-
-                    UserInputService.MouseIconEnabled = true
-                end)
+                Items["MainFrame"].Instance.Visible = Bool
+                UserInputService.MouseIconEnabled = true
             end
 
             function Window:SetText(Text)
@@ -6066,67 +6032,49 @@ local Library do
                 Items["Inactive"].Instance.Size = UDim2New(0, 34, 0, 34)
             end
 
-            local Debounce = false
+            local TabTweenInfo = TweenInfo.new(0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 
             function Page:Switch(Bool)
-                if Debounce then 
-                    return 
+                if Page.Active == Bool then
+                    return
                 end
 
                 Page.Active = Bool
                 Items["PageContent"].Instance.Visible = Bool
-                Items["PageContent"].Instance.Parent = Bool and Page.Window.Items["Content"].Instance or Library.UnusedHolder.Instance
-                
-                Debounce = true 
 
                 if Bool then
+                    Items["PageContent"].Instance.Position = UDim2New(0, 0, 0, 6)
+                    Items["PageContent"]:Tween(TabTweenInfo, {Position = UDim2New(0, 0, 0, 0)})
+
                     Items["Text"].Instance.Visible = true 
                     Items["Inactive"]:ChangeItemTheme({BackgroundColor3 = "Background"})
-                    Items["Inactive"]:Tween(nil, {BackgroundColor3 = Library.Theme.Background, BackgroundTransparency = 0, Size = UDim2New(0, Items["Text"].Instance.TextBounds.X + 50, 0, 34)})
+                    Items["Inactive"]:Tween(TabTweenInfo, {BackgroundColor3 = Library.Theme.Background, BackgroundTransparency = 0, Size = UDim2New(0, Items["Text"].Instance.TextBounds.X + 50, 0, 34)})
                     Items["Icon"]:ChangeItemTheme({ImageColor3 = "Accent"})
-                    Items["Icon"]:Tween(nil, {ImageColor3 = Library.Theme.Accent, ImageTransparency = 0})
-                    Items["ActiveLine"]:Tween(nil, {BackgroundTransparency = 0})
+                    Items["Icon"]:Tween(TabTweenInfo, {ImageColor3 = Library.Theme.Accent, ImageTransparency = 0})
+                    Items["ActiveLine"]:Tween(TabTweenInfo, {BackgroundTransparency = 0})
 
                     Library.CurrentPage = Page
                 else
                     Items["Text"].Instance.Visible = false 
                     Items["Inactive"]:ChangeItemTheme({BackgroundColor3 = "Inline"})
-                    Items["Inactive"]:Tween(nil, {BackgroundColor3 = Library.Theme.Inline, BackgroundTransparency = 1, Size = UDim2New(0, 34, 0, 34)})
+                    Items["Inactive"]:Tween(TabTweenInfo, {BackgroundColor3 = Library.Theme.Inline, BackgroundTransparency = 1, Size = UDim2New(0, 34, 0, 34)})
                     Items["Icon"]:ChangeItemTheme({ImageColor3 = "Image"})
-                    Items["Icon"]:Tween(nil, {ImageColor3 = Library.Theme.Image, ImageTransparency = 0.5})
-                    Items["ActiveLine"]:Tween(nil, {BackgroundTransparency = 1})
+                    Items["Icon"]:Tween(TabTweenInfo, {ImageColor3 = Library.Theme.Image, ImageTransparency = 0.5})
+                    Items["ActiveLine"]:Tween(TabTweenInfo, {BackgroundTransparency = 1})
                 end
-
-                local Descendants = Items["PageContent"].Instance:GetDescendants()
-                TableInsert(Descendants, Items["PageContent"].Instance)
-
-                local NewTween
-
-                for Index, Value in Descendants do 
-                    local TransparencyProperty = Tween:GetProperty(Value)
-
-                    if not TransparencyProperty then 
-                        continue
-                    end
-
-                    if type(TransparencyProperty) == "table" then 
-                        for _, Property in TransparencyProperty do 
-                            NewTween = Tween:FadeItem(Value, Property, Bool, Page.Window.FadeSpeed)
-                        end
-                    else
-                        NewTween = Tween:FadeItem(Value, TransparencyProperty, Bool, Page.Window.FadeSpeed)
-                    end
-                end
-
-                Library:Connect(NewTween.Tween.Completed, function()
-                    Debounce = false
-                end)
             end
 
             Items["Inactive"]:Connect("MouseButton1Down", function()
-                for Index, Value in Page.Window.Pages do
-                    Value:Switch(Value == Page)
+                if Page.Active then
+                    return
                 end
+
+                for Index, Value in Page.Window.Pages do
+                    if Value ~= Page and Value.Active then
+                        Value:Switch(false)
+                    end
+                end
+                Page:Switch(true)
             end)
 
             if #Page.Window.Pages == 0 then 
@@ -6294,67 +6242,49 @@ local Library do
                 end
             end
 
-            local Debounce = false
+            local SubTabTweenInfo = TweenInfo.new(0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 
             function SubPage:Switch(Bool)
-                if Debounce then 
-                    return 
+                if SubPage.Active == Bool then
+                    return
                 end
 
                 SubPage.Active = Bool
                 Items["PageContent"].Instance.Visible = Bool
-                Items["PageContent"].Instance.Parent = Bool and SubPage.Page.Items["Columns"].Instance or Library.UnusedHolder.Instance
-                
-                Debounce = true 
 
                 if Bool then
+                    Items["PageContent"].Instance.Position = UDim2New(0, 0, 0, 6)
+                    Items["PageContent"]:Tween(SubTabTweenInfo, {Position = UDim2New(0, 0, 0, 0)})
+
                     Items["Text"].Instance.Visible = true 
                     Items["Inactive"]:ChangeItemTheme({BackgroundColor3 = "Background"})
-                    Items["Inactive"]:Tween(nil, {BackgroundColor3 = Library.Theme.Background, BackgroundTransparency = 0, Size = UDim2New(0, Items["Text"].Instance.TextBounds.X + 50, 0, 34)})
+                    Items["Inactive"]:Tween(SubTabTweenInfo, {BackgroundColor3 = Library.Theme.Background, BackgroundTransparency = 0, Size = UDim2New(0, Items["Text"].Instance.TextBounds.X + 50, 0, 34)})
                     Items["Icon"]:ChangeItemTheme({ImageColor3 = "Accent"})
-                    Items["Icon"]:Tween(nil, {ImageColor3 = Library.Theme.Accent, ImageTransparency = 0})
-                    Items["ActiveLine"]:Tween(nil, {BackgroundTransparency = 0})
+                    Items["Icon"]:Tween(SubTabTweenInfo, {ImageColor3 = Library.Theme.Accent, ImageTransparency = 0})
+                    Items["ActiveLine"]:Tween(SubTabTweenInfo, {BackgroundTransparency = 0})
 
                     Library.CurrentPage = SubPage
                 else
                     Items["Text"].Instance.Visible = false 
                     Items["Inactive"]:ChangeItemTheme({BackgroundColor3 = "Inline"})
-                    Items["Inactive"]:Tween(nil, {BackgroundColor3 = Library.Theme.Inline, BackgroundTransparency = 1, Size = UDim2New(0, 34, 0, 34)})
+                    Items["Inactive"]:Tween(SubTabTweenInfo, {BackgroundColor3 = Library.Theme.Inline, BackgroundTransparency = 1, Size = UDim2New(0, 34, 0, 34)})
                     Items["Icon"]:ChangeItemTheme({ImageColor3 = "Image"})
-                    Items["Icon"]:Tween(nil, {ImageColor3 = Library.Theme.Image, ImageTransparency = 0.5})
-                    Items["ActiveLine"]:Tween(nil, {BackgroundTransparency = 1})
+                    Items["Icon"]:Tween(SubTabTweenInfo, {ImageColor3 = Library.Theme.Image, ImageTransparency = 0.5})
+                    Items["ActiveLine"]:Tween(SubTabTweenInfo, {BackgroundTransparency = 1})
                 end
-
-                local Descendants = Items["PageContent"].Instance:GetDescendants()
-                TableInsert(Descendants, Items["PageContent"].Instance)
-
-                local NewTween
-
-                for Index, Value in Descendants do 
-                    local TransparencyProperty = Tween:GetProperty(Value)
-
-                    if not TransparencyProperty then 
-                        continue
-                    end
-
-                    if type(TransparencyProperty) == "table" then 
-                        for _, Property in TransparencyProperty do 
-                            NewTween = Tween:FadeItem(Value, Property, Bool, SubPage.Window.FadeSpeed)
-                        end
-                    else
-                        NewTween = Tween:FadeItem(Value, TransparencyProperty, Bool, SubPage.Window.FadeSpeed)
-                    end
-                end
-
-                Library:Connect(NewTween.Tween.Completed, function()
-                    Debounce = false
-                end)
             end
 
             Items["Inactive"]:Connect("MouseButton1Down", function()
-                for Index, Value in SubPage.Page.SubPagesStack do
-                    Value:Switch(Value == SubPage)
+                if SubPage.Active then
+                    return
                 end
+
+                for Index, Value in SubPage.Page.SubPagesStack do
+                    if Value ~= SubPage and Value.Active then
+                        Value:Switch(false)
+                    end
+                end
+                SubPage:Switch(true)
             end)
 
             if #SubPage.Page.SubPagesStack == 0 then 
