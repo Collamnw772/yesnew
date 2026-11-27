@@ -872,8 +872,8 @@ local Library do
             return "rbxassetid://" .. tostring(Icon)
         end
 
-        -- already a full asset url (rbxassetid://..., rbxasset://..., http..., custom asset path)
-        if Icon:find("rbxassetid://") or Icon:find("rbxasset://") or Icon:find("http") or Icon:find("rbxasset") then
+        -- already a full asset url (rbxassetid://..., rbxasset://..., rbxthumb://..., http..., custom asset path)
+        if Icon:find("rbxassetid://") or Icon:find("rbxasset://") or Icon:find("rbxthumb://") or Icon:find("http") or Icon:find("rbxasset") then
             return Icon
         end
 
@@ -5091,6 +5091,7 @@ local Library do
         end
 
         Library.Watermark = function(self, Text, Logo)
+            Logo = Logo or "rbxthumb://type=Asset&id=90980516332996&w=420&h=420"
             local Watermark = { }
 
             local Items = { } do
@@ -5393,7 +5394,7 @@ local Library do
 
             local Window = {
                 Name = Data.Name or Data.name or "Valley.gg",
-                Logo = Data.Logo or Data.logo or "74247710022276",
+                Logo = Data.Logo or Data.logo or "rbxthumb://type=Asset&id=90980516332996&w=420&h=420",
                 FadeSpeed = Data.FadeSpeed or Data.fadespeed or 0.2,
                 Version = Data.Version or Data.version or "v1.0.0 alpha",
                 Size = not IsMobile and UDim2New(0, 620, 0, 511) or UDim2New(0, 511, 0, 459),
