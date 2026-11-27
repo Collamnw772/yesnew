@@ -911,18 +911,15 @@ local Library do
     end
 
     Library.Connect = function(self, Event, Callback, Name)
-        Name = Name or StringFormat("Connection%s%s", self.UnnamedConnections + 1, HttpService:GenerateGUID(false))
+        self.UnnamedConnections = self.UnnamedConnections + 1
+        Name = Name or StringFormat("Connection%s", self.UnnamedConnections)
 
         local NewConnection = {
             Event = Event,
             Callback = Callback,
             Name = Name,
-            Connection = nil
+            Connection = Event:Connect(Callback)
         }
-
-        Library:Thread(function()
-            NewConnection.Connection = Event:Connect(Callback)
-        end)
 
         TableInsert(self.Connections, NewConnection)
         return NewConnection
@@ -1873,7 +1870,7 @@ local Library do
                     end
                 end
 
-                OptionData.Button:Connect("MouseButton1Down", function()
+                OptionData.Connection = OptionData.Button.Instance.MouseButton1Down:Connect(function()
                     OptionData:Set()
                 end)
 
@@ -1882,13 +1879,42 @@ local Library do
             end
 
             function Dropdown:RemoveOption(Name)
-                if Dropdown.Options[Name] then
-                    Dropdown.Options[Name].Button:Clean()
+                local Opt = Dropdown.Options[Name]
+                if Opt then
+                    if Opt.Connection then
+                        Opt.Connection:Disconnect()
+                        Opt.Connection = nil
+                    end
+                    if Opt.Button and Opt.Button.Instance then
+                        Library.ThemeMap[Opt.Button.Instance] = nil
+                    end
+                    Opt.Button:Clean()
                     Dropdown.Options[Name] = nil
                 end
             end
 
+            local LastList = nil
+
             function Dropdown:Refresh(List)
+                if type(List) ~= "table" then
+                    return
+                end
+
+                if LastList and #LastList == #List then
+                    local Same = true
+                    for i = 1, #List do
+                        if LastList[i] ~= List[i] then
+                            Same = false
+                            break
+                        end
+                    end
+                    if Same then
+                        return
+                    end
+                end
+
+                LastList = TableClone(List)
+
                 for Index, Value in Dropdown.Options do 
                     Dropdown:RemoveOption(Value.Name)
                 end
