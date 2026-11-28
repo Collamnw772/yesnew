@@ -91,11 +91,11 @@ local Library do
         },
 
         Folders = {
-            Directory = "MidnightHut",
-            Configs = "MidnightHut/Configs",
-            Assets = "MidnightHut/Assets",
-            Fonts = "MidnightHut/Fonts",
-            Themes = "MidnightHut/Themes"
+            Directory = "Library",
+            Configs = "Library/Configs",
+            Assets = "Library/Assets",
+            Fonts = "Library/Fonts",
+            Themes = "Library/Themes"
         },
 
         Images = { -- you're welcome to reupload the images and replace it with your own links
@@ -3936,11 +3936,11 @@ local Library do
 
             function Keybind:Set(Key)
                 if StringFind(tostring(Key), "Enum") then 
-                    Keybind.Key = tostring(Key)
+                    local IsClear = (Key.Name == "Backspace" or Key.Name == "Escape")
+                    Keybind.Key = IsClear and "None" or tostring(Key)
 
-                    Key = Key.Name == "Backspace" and "None" or Key.Name
-
-                    local KeyString = Keys[Keybind.Key] or StringGSub(Key, "Enum.", "") or "None"
+                    local KeyName = IsClear and "None" or Key.Name
+                    local KeyString = Keys[Keybind.Key] or StringGSub(KeyName, "Enum.", "") or "None"
                     local TextToDisplay = StringGSub(StringGSub(KeyString, "KeyCode.", ""), "UserInputType.", "") or "None"
 
                     Keybind.Value = TextToDisplay
@@ -3953,7 +3953,7 @@ local Library do
                     }
 
                     if Data.Callback then 
-                        Library:SafeCall(Data.Callback, Keybind.Toggled)
+                        Library:SafeCall(Data.Callback, Keybind.Toggled, Keybind.Key)
                     end
 
                     Update()
@@ -4027,28 +4027,36 @@ local Library do
                 end
 
                 Keybind.Picking = true
-
+                Items["KeyButton"].Instance.Text = "..."
                 Items["KeyButton"]:Tween(nil, {TextTransparency = 0})
 
-                local InputBegan 
-                InputBegan = UserInputService.InputBegan:Connect(function(Input)
-                    if Input.UserInputType == Enum.UserInputType.Keyboard then 
-                        Keybind:Set(Input.KeyCode)
-                    else
-                        Keybind:Set(Input.UserInputType)
-                    end
-
-                    InputBegan:Disconnect()
-                    InputBegan = nil
+                task.defer(function()
+                    local InputBegan
+                    InputBegan = UserInputService.InputBegan:Connect(function(Input)
+                        if Input.UserInputType == Enum.UserInputType.Keyboard then
+                            if Input.KeyCode == Enum.KeyCode.Unknown then return end
+                            InputBegan:Disconnect()
+                            InputBegan = nil
+                            Keybind:Set(Input.KeyCode)
+                        elseif Input.UserInputType == Enum.UserInputType.MouseButton1
+                            or Input.UserInputType == Enum.UserInputType.MouseButton2
+                            or Input.UserInputType == Enum.UserInputType.MouseButton3 then
+                            InputBegan:Disconnect()
+                            InputBegan = nil
+                            Keybind:Set(Input.UserInputType)
+                        end
+                    end)
                 end)
             end)
 
-            Library:Connect(UserInputService.InputBegan, function(Input)
-                if tostring(Input.KeyCode) == Keybind.Key or tostring(Input.UserInputType) == Keybind.Key and not Keybind.Value == "None" then
-                    if Keybind.Mode == "toggle" then 
-                        Keybind:Press()
-                    elseif Keybind.Mode == "hold" then 
-                        Keybind:Press(true)
+            Library:Connect(UserInputService.InputBegan, function(Input, GameProcessedEvent)
+                if not GameProcessedEvent and not Keybind.Picking and Keybind.Value ~= "None" then
+                    if tostring(Input.KeyCode) == Keybind.Key or tostring(Input.UserInputType) == Keybind.Key then
+                        if Keybind.Mode == "toggle" then 
+                            Keybind:Press()
+                        elseif Keybind.Mode == "hold" then 
+                            Keybind:Press(true)
+                        end
                     end
                 end
 
@@ -4929,7 +4937,7 @@ local Library do
             local TimerHex = StringFormat("#%02X%02X%02X", MathFloor(Library.Theme["Inactive Text"].R * 255), MathFloor(Library.Theme["Inactive Text"].G * 255), MathFloor(Library.Theme["Inactive Text"].B * 255))
 
             local TitleText = function(Seconds)
-                return StringFormat("Midnight <font color=\"%s\">Hub</font> <font color=\"%s\">| %ds</font>", AccentHex, TimerHex, Seconds)
+                return StringFormat("<font color=\"%s\">| %ds</font>", TimerHex, Seconds)
             end
 
             local Items = { } do
